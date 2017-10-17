@@ -1,101 +1,32 @@
-
+#!/usr/bin/python
 import os
 import sys
+import wsgi
+from cherrypy import wsgiserver
 
-import random
-import Cookie
-from enrutadorhttp import EnrutadorHTTP
+#hack to make sure we can load wsgi.py as a module in this class
+sys.path.insert(0, os.path.dirname(__file__))
 
-from dominios import dominios
-
-from SocketServer import ThreadingMixIn
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-
-
-
-
-
-class ManejadorPersonalizado(BaseHTTPRequestHandler, EnrutadorHTTP):
-	"""docstring for ClassName"""
-	session={}
-	galleta=''
-
-	def do_GET(self):
-		self.procesar_peticion_get()
-
-	def do_POST(self):
-
-		self.procesar_peticion_post()
+virtenv = os.environ['OPENSHIFT_PYTHON_DIR'] + '/virtenv/'
+virtualenv = os.path.join(virtenv, 'bin/activate_this.py')
+try:
+  #execfile(virtualenv, dict(__file__=virtualenv)) # for Python v2.7
+  #exec(compile(open(virtualenv, 'rb').read(), virtualenv, 'exec'), dict(__file__=virtualenv)) # for Python v3.3
+  # Multi-Line for Python v3.3:
+  exec_namespace = dict(__file__=virtualenv)
+  with open(virtualenv, 'rb') as exec_file:
+    file_contents = exec_file.read()
+  compiled_code = compile(file_contents, virtualenv, 'exec')
+  exec(compiled_code, exec_namespace)
+except IOError:
+  pass
 
 
-	def iniciar_session(self):
-		self.cookie=Cookie.SimpleCookie()
-
-		if "Cookie" in self.headers:
-			self.cookie.load(self.headers.get('cookie'))
-			sesion,galleta=self.server.get_session(self.cookie)
-			if 'IDSS' not in self.cookie:
-				self.cookie['IDSS']=galleta
-			if 'LANG' not in self.cookie:
-				self.cookie['LANG']='es'
-
-		else:
-			sesion,galleta=self.server.get_session()
-			self.cookie['IDSS']=galleta
-			self.cookie['LANG']="es"
-
-			
-		self.session=sesion['Sesion']
-		self.galleta=galleta
-
-	def setSession(self,g,k,value):
-		self.server.set_session(g,k,value)
+# Get the environment information we need to start the server
+ip = os.environ['OPENSHIFT_PYTHON_IP']
+port = int(os.environ['OPENSHIFT_PYTHON_PORT'])
+host_name = os.environ['OPENSHIFT_GEAR_DNS']
 
 
-
-
-class Server(ThreadingMixIn, HTTPServer):
-	abc={}
-	num=0
-	def get_session(self,val=None):
-
-#		obj=val['IDSS'].value
-
-		c=Cookie.SimpleCookie(val)
-		if len(c)==0:
-			obj=None
-		elif 'IDSS' not in c:
-			obj=None
-		else:
-			obj=c['IDSS'].value
-
-		t=''
-		for x in xrange(1,10):
-			r=random.randint(1, 61)
-			if r<10:
-				t+=chr(r+48)
-			elif r<36:
-				t+=chr(r+55)
-			else:
-				t+=chr(r+61)
-
-
-
-#        if obj:
-
-		if obj in self.abc:
-			return self.abc[obj],obj
-		elif obj==None:
-			self.abc[t]={'Sesion':{}}
-			return (self.abc[t], t)
-		else:
-			self.abc[obj]={'Sesion':{}}
-			return (self.abc[obj],obj)
-	def set_session(self,obj,k,value):
-
-		self.abc[obj]['Sesion'][k]=value
-
-		return
-dominios.instanciar()
-http=Server(('',1542),ManejadorPersonalizado)
-http.serve_forever()
+server = wsgiserver.CherryPyWSGIServer((ip, port), wsgi.application, server_name=host_name)
+server.start()
